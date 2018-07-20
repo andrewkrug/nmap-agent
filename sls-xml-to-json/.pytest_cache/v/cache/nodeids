@@ -1,0 +1,3 @@
+[
+  "tests/test_event.py::test_event_passes_handler"
+]

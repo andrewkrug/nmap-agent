@@ -1,0 +1,70 @@
+service: sls-xml-to-json
+provider:
+  name: aws
+  runtime: python3.6
+  region: us-west-2
+  account_id: 656532927350
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action:
+        - "sqs:*"
+      Resource: "arn:aws:sqs:*:*:nmap-client-xml-to-json"
+    - Effect: "Allow"
+      Action:
+        - "sqs:ListQueues"
+      Resource: "arn:aws:sqs:*:*:*"
+    - Effect: "Allow"
+      Action:
+        - "s3:*"
+      Resource: "arn:aws:s3:::nmap-client-data.security.mozilla.com**"
+functions:
+  xmltojson:
+    handler: handler.main
+    events:
+      - sqs:
+          arn: arn:aws:sqs:${self:provider.region}:${self:provider.account_id}:nmap-client-xml-to-json
+        batchSize: 1
+        enabled: True
+resources:
+  Resources:
+    MessageQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: nmap-client-xml-to-json
+    QueuePolicy:
+      Type: AWS::SQS::QueuePolicy
+      DependsOn:
+        - MessageQueue
+      Properties:
+        Queues:
+          - Ref: "MessageQueue"
+        PolicyDocument:
+          Version: '2008-10-17'
+          Statement:
+          - Effect: Allow
+            Principal:
+              AWS: '*'
+            Action: 'SQS:SendMessage'
+            Resource:
+              Fn::GetAtt:
+                - MessageQueue
+                - Arn
+    S3DataBucket:
+      Type: AWS::S3::Bucket
+      DependsOn:
+        - MessageQueue
+        - QueuePolicy
+      Properties:
+        BucketName: nmap-client-data.security.mozilla.com
+        NotificationConfiguration:
+          QueueConfigurations:
+            - Event: s3:ObjectCreated:*
+              Queue:
+                Fn::GetAtt:
+                  - MessageQueue
+                  - Arn
+              Filter:
+                S3Key:
+                  Rules:
+                    - Name: prefix
+                      Value: xml/
